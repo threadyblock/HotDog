@@ -112,8 +112,13 @@
 
                     <!-- Gemini AI Feature -->
                     <div class="w-full flex flex-col items-center gap-4">
-                        <button id="btn-ai-analysis" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 flex items-center gap-2">
+                        <button id="btn-ai-analysis" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 flex items-center gap-2 w-64 justify-center">
                             <i class="fas fa-sparkles"></i> Get Chef's Roast
+                        </button>
+
+                        <!-- NEW TRY AGAIN BUTTON -->
+                        <button id="btn-try-again-overlay" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 flex items-center gap-2 w-64 justify-center">
+                            <i class="fas fa-redo"></i> Try Again
                         </button>
                         
                         <!-- AI Response Card -->
@@ -184,6 +189,7 @@
         
         // AI Elements
         const btnAiAnalysis = document.getElementById('btn-ai-analysis');
+        const btnTryAgainOverlay = document.getElementById('btn-try-again-overlay');
         const aiResponseCard = document.getElementById('ai-response-card');
         const aiText = document.getElementById('ai-text');
 
@@ -209,6 +215,7 @@
         btnCapture.addEventListener('click', captureAndClassify);
         btnReset.addEventListener('click', resetApp);
         btnAiAnalysis.addEventListener('click', callGeminiApi);
+        btnTryAgainOverlay.addEventListener('click', resetApp);
 
         // Function: Start Camera (Live View)
         async function startCamera() {
