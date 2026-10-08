@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>SeeFood - Hot Dog Identifier</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load TensorFlow.js and MobileNet -->
@@ -63,6 +63,11 @@
         }
         @keyframes blink { 50% { opacity: 0; } }
 
+        /* Keep the shutter bar clear of the iPhone home indicator */
+        #controls {
+            padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+        }
+
         /* Scanner line sweep */
         @keyframes scan {
             0% { top: 0; }
@@ -109,7 +114,7 @@
 
             <!-- Result Overlay -->
             <div id="result-overlay" class="absolute inset-x-0 top-0 bottom-0 z-20 flex flex-col items-center justify-center hidden-el bg-black bg-opacity-80 backdrop-blur-sm overflow-y-auto">
-                <div class="flex flex-col items-center justify-center w-full max-w-md p-4 pb-36 min-h-full">
+                <div class="flex flex-col items-center justify-center w-full max-w-md p-4 min-h-full" style="padding-bottom: calc(10rem + env(safe-area-inset-bottom));">
                     <!-- Main Badge -->
                     <div id="result-badge" class="transform scale-0 transition-transform duration-300 p-8 rounded-full border-8 shadow-2xl flex flex-col items-center justify-center w-64 h-64 bg-white shrink-0 mb-6">
                         <i id="result-icon" class="text-8xl mb-2"></i>
@@ -147,18 +152,15 @@
         </div>
 
         <!-- Controls Footer -->
-        <div id="controls" class="h-32 bg-black bg-opacity-50 backdrop-blur-md absolute bottom-0 w-full flex items-center justify-around z-30 pb-4 hidden-el">
-            <button id="btn-retake" class="text-white opacity-0 pointer-events-none transition-opacity p-4">
-                <i class="fas fa-redo text-2xl"></i>
-            </button>
-            
+        <!-- Three equal columns keep the shutter dead-center whether or not the side buttons are showing -->
+        <div id="controls" class="bg-black bg-opacity-50 backdrop-blur-md absolute bottom-0 w-full grid grid-cols-3 items-center justify-items-center z-30 pt-6 hidden-el">
             <!-- Shutter Button -->
-            <button id="btn-capture" class="w-20 h-20 bg-white rounded-full border-4 border-gray-300 shadow-lg active:bg-gray-200 transition transform active:scale-95 flex items-center justify-center">
+            <button id="btn-capture" class="col-start-2 w-20 h-20 bg-white rounded-full border-4 border-gray-300 shadow-lg active:bg-gray-200 transition transform active:scale-95 flex items-center justify-center">
                 <div class="w-16 h-16 bg-red-500 rounded-full border-2 border-white"></div>
             </button>
 
             <!-- Reset Button (visible after result) -->
-            <button id="btn-reset" class="text-white p-4 hidden-el z-40">
+            <button id="btn-reset" class="col-start-3 text-white p-4 hidden-el z-40">
                 <i class="fas fa-times text-3xl"></i>
             </button>
         </div>
