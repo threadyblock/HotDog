@@ -37,6 +37,7 @@
             position: relative;
             width: 100%;
             height: 100vh;
+            height: 100dvh; /* Mobile Safari: keep controls above the browser toolbar */
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -61,6 +62,13 @@
             animation: blink 1s step-start infinite;
         }
         @keyframes blink { 50% { opacity: 0; } }
+
+        /* Scanner line sweep */
+        @keyframes scan {
+            0% { top: 0; }
+            50% { top: 100%; }
+            100% { top: 0; }
+        }
     </style>
 </head>
 <body class="h-screen w-screen relative">
@@ -101,7 +109,7 @@
 
             <!-- Result Overlay -->
             <div id="result-overlay" class="absolute inset-x-0 top-0 bottom-0 z-20 flex flex-col items-center justify-center hidden-el bg-black bg-opacity-80 backdrop-blur-sm overflow-y-auto">
-                <div class="flex flex-col items-center justify-center w-full max-w-md p-4 min-h-screen">
+                <div class="flex flex-col items-center justify-center w-full max-w-md p-4 pb-36 min-h-full">
                     <!-- Main Badge -->
                     <div id="result-badge" class="transform scale-0 transition-transform duration-300 p-8 rounded-full border-8 shadow-2xl flex flex-col items-center justify-center w-64 h-64 bg-white shrink-0 mb-6">
                         <i id="result-icon" class="text-8xl mb-2"></i>
@@ -113,7 +121,7 @@
                     <!-- Gemini AI Feature -->
                     <div class="w-full flex flex-col items-center gap-4">
                         <button id="btn-ai-analysis" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 flex items-center gap-2 w-64 justify-center">
-                            <i class="fas fa-sparkles"></i> Get Chef's Roast
+                            <i class="fas fa-wand-magic-sparkles"></i> Get Chef's Roast
                         </button>
 
                         <!-- NEW TRY AGAIN BUTTON -->
@@ -160,12 +168,19 @@
     <canvas id="canvas" class="hidden"></canvas>
 
     <script>
-        const apiKey = ""; // System provides this
+        // Gemini API key is entered by the user at runtime and kept in this browser only.
+        // Never hard-code a key here: this file is public on GitHub.
+        const API_KEY_STORAGE = 'seefood-gemini-key';
+        const GEMINI_MODEL = 'gemini-flash-latest';
+        // MobileNet must be at least this sure before we call it a hot dog
+        const HOT_DOG_THRESHOLD = 0.2;
+        const AI_IMAGE_MAX_SIZE = 1024;
 
         // State
         let model = null;
         let isVideoMode = false;
         let isProcessing = false;
+        let typewriterTimer = null;
 
         // Elements
         const loadingScreen = document.getElementById('loading-screen');
@@ -241,6 +256,8 @@
         // Function: Handle File Upload (Fallback)
         function handleFileUpload(e) {
             const file = e.target.files[0];
+            // Clear so picking the same photo again still fires 'change'
+            fileInput.value = '';
             if (!file) return;
 
             const reader = new FileReader();
@@ -268,6 +285,8 @@
         // Function: Capture from Video and Classify
         async function captureAndClassify() {
             if (isProcessing) return;
+            // Camera hasn't delivered a frame yet
+            if (isVideoMode && !video.videoWidth) return;
             isProcessing = true;
 
             let sourceImage;
@@ -295,17 +314,6 @@
             // Show scanning animation
             scannerLine.classList.remove('hidden-el');
             scannerLine.style.animation = 'scan 1.5s linear infinite';
-            
-            // Add custom scan animation style
-            const style = document.createElement('style');
-            style.innerHTML = `
-                @keyframes scan {
-                    0% { top: 0; }
-                    50% { top: 100%; }
-                    100% { top: 0; }
-                }
-            `;
-            document.head.appendChild(style);
 
             // Wait a tiny bit for UI to update then classify
             setTimeout(() => classifyImage(sourceImage), 100);
@@ -318,20 +326,17 @@
                 const predictions = await model.classify(imgElement);
                 
                 // Logic: Is it a hot dog?
-                // We check the top predictions for the string "hot dog" or "hotdog"
-                let isHotDog = false;
-                let score = 0;
+                // Look for the ImageNet "hotdog, hot dog, red hot" class among the top predictions,
+                // ignoring weak guesses so a 2% third-place match doesn't count.
+                const hotDog = predictions.find(p => {
+                    const className = p.className.toLowerCase();
+                    return className.includes('hot dog') || className.includes('hotdog');
+                });
+                const isHotDog = !!hotDog && hotDog.probability >= HOT_DOG_THRESHOLD;
+                const score = isHotDog ? Math.round(hotDog.probability * 100) : 0;
+                const topGuess = predictions[0] ? predictions[0].className.split(',')[0] : '';
 
-                for (let i = 0; i < predictions.length; i++) {
-                    const className = predictions[i].className.toLowerCase();
-                    if (className.includes('hot dog') || className.includes('hotdog')) {
-                        isHotDog = true;
-                        score = Math.round(predictions[i].probability * 100);
-                        break;
-                    }
-                }
-
-                showResult(isHotDog, score);
+                showResult(isHotDog, score, topGuess);
 
             } catch (error) {
                 console.error("Classification error:", error);
@@ -341,7 +346,7 @@
         }
 
         // Function: Display Results
-        function showResult(isHotDog, confidence) {
+        function showResult(isHotDog, confidence, topGuess) {
             // Stop scanning animation
             scannerLine.classList.add('hidden-el');
             scannerLine.style.animation = 'none';
@@ -367,14 +372,46 @@
                 resultBadge.className = "transform transition-transform duration-300 p-8 rounded-full border-8 border-red-500 shadow-2xl flex flex-col items-center justify-center w-64 h-64 bg-red-100 text-red-600 scale-100 shrink-0 mb-6";
                 resultIcon.className = "fas fa-times text-8xl mb-2";
                 resultText.innerText = "Not Hot Dog";
-                confidenceMeter.innerText = ""; 
+                confidenceMeter.innerText = topGuess ? `Looks like: ${topGuess}` : "";
             }
 
-            confidenceMeter.classList.remove('hidden-el');
+            confidenceMeter.classList.toggle('hidden-el', !confidenceMeter.innerText);
+
+            // Start the badge collapsed, then pop it in on the next frame so the transition plays
+            resultBadge.classList.replace('scale-100', 'scale-0');
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                resultBadge.classList.replace('scale-0', 'scale-100');
+            }));
+        }
+
+        function getApiKey() {
+            let key = '';
+            try { key = localStorage.getItem(API_KEY_STORAGE) || ''; } catch (e) {}
+            if (!key) {
+                key = (prompt("Paste your Gemini API key (get one free at aistudio.google.com/apikey). It's saved only in this browser.") || '').trim();
+                if (key) {
+                    try { localStorage.setItem(API_KEY_STORAGE, key); } catch (e) {}
+                }
+            }
+            return key;
+        }
+
+        // Re-encode whatever was captured/uploaded (PNG, WebP, huge phone photo...) as a
+        // reasonably sized JPEG, so the mimeType we send to Gemini is actually true.
+        function getImageForAi() {
+            const scale = Math.min(1, AI_IMAGE_MAX_SIZE / Math.max(capturedImage.naturalWidth, capturedImage.naturalHeight));
+            const aiCanvas = document.createElement('canvas');
+            aiCanvas.width = Math.round(capturedImage.naturalWidth * scale);
+            aiCanvas.height = Math.round(capturedImage.naturalHeight * scale);
+            aiCanvas.getContext('2d').drawImage(capturedImage, 0, 0, aiCanvas.width, aiCanvas.height);
+            return aiCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
         }
 
         // --- GEMINI API INTEGRATION ---
         async function callGeminiApi() {
+            const apiKey = getApiKey();
+            if (!apiKey) return;
+
             // 1. UI Loading State
             const originalBtnText = btnAiAnalysis.innerHTML;
             btnAiAnalysis.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Roasting...';
@@ -382,20 +419,20 @@
             btnAiAnalysis.classList.add('opacity-75');
             
             aiResponseCard.classList.add('hidden-el');
+            stopTypewriter();
             aiText.innerText = "";
 
             try {
-                // 2. Prepare Image Data (Base64)
-                // capturedImage.src is a Data URL (data:image/jpeg;base64,...)
-                const base64Data = capturedImage.src.split(',')[1]; 
+                // 2. Prepare Image Data (Base64 JPEG)
+                const base64Data = getImageForAi();
 
                 // 3. Construct the prompt
                 const prompt = "You are a dramatic, snooty, Gordon Ramsay-esque food critic. Look at this image. If it is a hot dog, critique its plating, bun quality, and toppings (be tough), then suggest a fancy beverage pairing. If it is NOT a hot dog, identify what it is and sarcastically roast the user for trying to pass it off as a hot dog. Keep it short (max 2 sentences) and funny.";
 
                 // 4. Call Gemini API
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
                     body: JSON.stringify({
                         contents: [{
                             parts: [
@@ -406,10 +443,18 @@
                     })
                 });
 
-                if (!response.ok) throw new Error("API Error");
+                if (!response.ok) {
+                    // Bad/revoked key: forget it so the user is asked again next time
+                    if (response.status === 400 || response.status === 403) {
+                        try { localStorage.removeItem(API_KEY_STORAGE); } catch (e) {}
+                    }
+                    throw new Error(`API Error ${response.status}: ${await response.text()}`);
+                }
 
                 const data = await response.json();
-                const text = data.candidates[0].content.parts[0].text;
+                // Missing when the response was blocked by safety filters
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) throw new Error("Empty response from Gemini");
 
                 // 5. Display Result
                 aiResponseCard.classList.remove('hidden-el');
@@ -426,17 +471,25 @@
             }
         }
 
+        function stopTypewriter() {
+            clearTimeout(typewriterTimer);
+            typewriterTimer = null;
+            aiText.classList.remove('typing-cursor');
+        }
+
         function typewriterEffect(text, element) {
-            element.innerHTML = "";
+            stopTypewriter();
+            // textContent, not innerHTML: model output is untrusted and may contain < or &
+            element.textContent = "";
             element.classList.add('typing-cursor');
             let i = 0;
-            const speed = 20; 
-            
+            const speed = 20;
+
             function type() {
                 if (i < text.length) {
-                    element.innerHTML += text.charAt(i);
+                    element.textContent += text.charAt(i);
                     i++;
-                    setTimeout(type, speed);
+                    typewriterTimer = setTimeout(type, speed);
                 } else {
                     element.classList.remove('typing-cursor');
                 }
@@ -454,6 +507,8 @@
             resultBadge.classList.remove('scale-100');
             resultBadge.classList.add('scale-0');
             aiResponseCard.classList.add('hidden-el');
+            stopTypewriter();
+            aiText.textContent = "";
             
             // Button Toggle
             btnCapture.classList.remove('hidden-el');
